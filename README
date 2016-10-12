@@ -1,0 +1,7 @@
+To package an executable with all dependencies:
+* run: mvn package
+* java -jar FileMatcher.jar inputFolder regular_expression outputFolder
+
+To run from Eclipse/IntelliJ:
+* Main class: MimecastLauncher with arguments: inputFolder regular_expression outputFOlder
+

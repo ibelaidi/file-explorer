@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/batch http://www.springframework.org/schema/batch/spring-batch-3.0.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.1.xsd">
+
+	<description>
+		- basically reads file and writes each line out unchanged
+		- input/output files are configured with stepscope and jobparameters
+		- expects an input file, see
+		http://static.springsource.org/spring-batch/apidocs/org/springframework/batch/item/file/FlatFileItemReader.html#setStrict(boolean)
+		see:
+		-
+		http://static.springsource.org/spring-batch/reference/html-single/index.html#flatFileItemReader
+		-
+		http://static.springsource.org/spring-batch/apidocs/org/springframework/batch/item/file/FlatFileItemReader.html
+	</description>
+	<!-- inline xmlns, otherwise it would look like 'batch:job, batch:step, 
+		etc.' -->
+	<job id="multiResourcePartitionerJob" xmlns="http://www.springframework.org/schema/batch">
+		<step id="businessStep" parent="businessStep:master" />
+	</job>
+
+	<step id="concreteBusinessStep" xmlns="http://www.springframework.org/schema/batch">
+		<tasklet>
+			<chunk reader="itemReader" writer="itemWriter"
+				commit-interval="200000" />
+		</tasklet>
+	</step>
+
+	<bean name="businessStep:master"
+		class="org.springframework.batch.core.partition.support.PartitionStep">
+		<description>
+			* concurrencyLimit matches count of read files to force
+			multi-threading
+		</description>
+		<property name="jobRepository" ref="jobRepository" />
+		<property name="stepExecutionSplitter">
+			<bean
+				class="org.springframework.batch.core.partition.support.SimpleStepExecutionSplitter">
+				<constructor-arg ref="jobRepository" />
+				<constructor-arg ref="concreteBusinessStep" />
+				<constructor-arg>
+					<bean
+						class="gb.ilias.mimecast.file.matcher.readers.file.multiresourcepartitioner.CustomMultiResourcePartitioner"
+						scope="step">
+						<property name="resources" value="#{jobParameters['input.file.pattern']}" />
+					</bean>
+				</constructor-arg>
+			</bean>
+		</property>
+		<property name="partitionHandler">
+			<bean
+				class="org.springframework.batch.core.partition.support.TaskExecutorPartitionHandler">
+				<property name="taskExecutor">
+					<bean class="org.springframework.core.task.SimpleAsyncTaskExecutor">
+						<property name="concurrencyLimit" value="20" />
+					</bean>
+				</property>
+				<property name="step" ref="concreteBusinessStep" />
+			</bean>
+		</property>
+	</bean>
+
+	<bean id="itemReader" class="org.springframework.batch.item.file.FlatFileItemReader"
+		scope="step">
+		<property name="resource" value="#{stepExecutionContext['inputFilePath']}" />
+		<property name="lineMapper">
+			<bean
+				class="org.springframework.batch.item.file.mapping.PassThroughLineMapper" />
+		</property>
+		<property name="strict" value="true" />
+	</bean>
+
+	<bean id="itemWriter" class="gb.ilias.mimecast.file.matcher.writers.FileMatchWriter"
+		scope="step">
+		<property name="resource"
+			value="#{jobParameters['output.dir']}#{stepExecutionContext['outputFileName']}" />
+		<property name="regularExpression"
+			value="#{jobParameters['str.regexp']}#{stepExecutionContext['regularExpression']}" />
+		<property name="lineAggregator">
+			<bean
+				class="org.springframework.batch.item.file.transform.PassThroughLineAggregator" />
+		</property>
+	</bean>
+</beans>
